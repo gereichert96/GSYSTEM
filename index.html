@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Acceso de Eventos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js" type="module"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js" type="module"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js" type="module"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .container-wrapper {
+            max-width: 1200px;
+            margin: auto;
+            padding: 1rem;
+        }
+        .card {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .tab-button.active {
+            border-color: #2563eb;
+            color: #2563eb;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex justify-center items-start min-h-screen p-4">
+
+    <div class="container-wrapper">
+        <!-- Logo y Título -->
+        <div class="text-center mb-8">
+            <img src="GERMAN.png" alt="GSYSTEM Logo" class="mx-auto h-20 mb-4 rounded-lg">
+            <h1 class="text-6xl font-bold text-gray-800 leading-tight">Control de Accesos</h1>
+        </div>
+        
+        <!-- Navegación por pestañas -->
+        <div class="flex border-b border-gray-200 mb-8">
+            <button id="tab-add" data-tab="tab-add-guests" class="tab-button active flex-1 py-4 px-1 text-center font-medium text-gray-700 hover:text-blue-600 transition duration-300 focus:outline-none">Añadir Invitados</button>
+            <button id="tab-scan" data-tab="tab-scanner" class="tab-button flex-1 py-4 px-1 text-center font-medium text-gray-700 hover:text-blue-600 transition duration-300 focus:outline-none">Escáner de Acceso</button>
+            <button id="tab-list" data-tab="tab-guest-list" class="tab-button flex-1 py-4 px-1 text-center font-medium text-gray-700 hover:text-blue-600 transition duration-300 focus:outline-none">Lista de Invitados</button>
+        </div>
+
+        <!-- Contenido de las pestañas -->
+        <div class="grid grid-cols-1 gap-6">
+
+            <!-- Pestaña de Añadir Invitados -->
+            <div id="tab-add-guests" class="card tab-content">
+                <h2 class="text-2xl font-bold mb-4 text-center">Añadir Invitados</h2>
+                <div class="mb-4">
+                    <label for="guestNameInput" class="block text-gray-700 font-medium mb-2">Nombre del Invitado</label>
+                    <input type="text" id="guestNameInput" placeholder="Ej. Juan Pérez" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="mb-4">
+                    <label for="paymentMethodSelect" class="block text-gray-700 font-medium mb-2">Método de Pago</label>
+                    <select id="paymentMethodSelect" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="EFECTIVO">EFECTIVO</option>
+                        <option value="TRANSFERENCIA">TRANSFERENCIA</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label for="amountPaidInput" class="block text-gray-700 font-medium mb-2">Monto Abonado</label>
+                    <input type="number" id="amountPaidInput" placeholder="Ej. 100" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <button id="generateQrBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 transform hover:scale-105">
+                    Generar QR y Agregar a la Lista
+                </button>
+                <div id="qr-display-container" class="text-center mt-6 p-4 border border-gray-200 rounded-lg hidden">
+                    <h3 id="qr-guest-name" class="font-semibold text-lg text-gray-700 mb-2"></h3>
+                    <div id="qr-code-display" class="w-48 h-48 mx-auto mb-4 rounded-lg flex items-center justify-center"></div>
+                    <button id="whatsappShareBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300">
+                        Enviar por WhatsApp
+                    </button>
+                </div>
+            </div>
+
+            <!-- Pestaña de Escáner de Acceso -->
+            <div id="tab-scanner" class="card tab-content hidden">
+                <h2 class="text-2xl font-bold mb-4 text-center">Escáner de Acceso</h2>
+                <p class="text-gray-600 text-sm text-center mb-4">Usa la cámara para escanear el código QR del invitado.</p>
+                <div id="qr-reader" class="w-full border-2 border-gray-300 rounded-lg overflow-hidden"></div>
+                <div id="resultBox" class="text-center mt-4"></div>
+            </div>
+
+            <!-- Pestaña de Lista de Invitados -->
+            <div id="tab-guest-list" class="card tab-content hidden">
+                <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4 sm:gap-0">
+                    <h2 class="text-2xl font-bold text-center sm:text-left">Lista de Invitados</h2>
+                    <div class="flex flex-col sm:flex-row gap-4 text-center sm:text-left">
+                        <p class="text-gray-600 text-sm mt-2 sm:mt-0">Total: <span id="totalGuestsCount" class="font-semibold text-blue-600">0</span></p>
+                        <p class="text-gray-600 text-sm mt-2 sm:mt-0">Registrados: <span id="registeredGuestsCount" class="font-semibold text-green-600">0</span></p>
+                    </div>
+                </div>
+                <!-- Barra de búsqueda -->
+                <div class="mb-4">
+                    <input type="text" id="guestSearchInput" placeholder="Buscar por nombre o referencia..." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div id="guestsList" class="max-h-96 overflow-y-auto">
+                    <!-- Los invitados se listarán aquí -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Ventana de mensajes personalizada -->
+        <div id="message-box" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden justify-center items-center z-50">
+            <div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm text-center transform transition-all duration-300 scale-95">
+                <p id="message-text" class="text-lg mb-4"></p>
+                <button id="close-message-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
+                    Cerrar
+                </button>
+            </div>
+        </div>
+
+        <!-- Nuevo Modal para mostrar el QR -->
+        <div id="qr-modal-box" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden justify-center items-center z-50">
+            <div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm text-center transform transition-all duration-300 scale-95">
+                <h3 id="qr-modal-guest-name" class="text-xl font-semibold mb-4 text-gray-800"></h3>
+                <div id="qr-modal-display" class="w-48 h-48 mx-auto mb-4 rounded-lg flex items-center justify-center"></div>
+                <button id="close-qr-modal-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">
+                    Cerrar
+                </button>
+            </div>
+        </div>
+
+        <!-- Modal para Editar Invitado -->
+        <div id="edit-guest-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden justify-center items-center z-50 p-4">
+            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg transform transition-all duration-300 scale-95">
+                <h3 class="text-2xl font-bold mb-4 text-center">Editar Invitado</h3>
+                <input type="hidden" id="edit-guest-id">
+                <div class="mb-4">
+                    <label for="edit-guest-name" class="block text-gray-700 font-medium mb-2">Nombre</label>
+                    <input type="text" id="edit-guest-name" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="mb-4">
+                    <label for="edit-payment-method" class="block text-gray-700 font-medium mb-2">Método de Pago</label>
+                    <select id="edit-payment-method" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="EFECTIVO">EFECTIVO</option>
+                        <option value="TRANSFERENCIA">TRANSFERENCIA</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label for="edit-amount-paid" class="block text-gray-700 font-medium mb-2">Monto Abonado</label>
+                    <input type="number" id="edit-amount-paid" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="mb-4 flex items-center">
+                    <input type="checkbox" id="edit-checked-in" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                    <label for="edit-checked-in" class="ml-2 block text-gray-700">Registrado</label>
+                </div>
+                <div class="flex justify-end gap-4 mt-6">
+                    <button id="save-edit-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg">
+                        Guardar Cambios
+                    </button>
+                    <button id="cancel-edit-btn" class="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal para Eliminar Invitado -->
+        <div id="delete-guest-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden justify-center items-center z-50 p-4">
+            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm text-center transform transition-all duration-300 scale-95">
+                <h3 class="text-xl font-bold mb-4">¿Estás seguro de que quieres eliminar a <span id="delete-guest-name" class="text-red-600"></span>?</h3>
+                <p class="text-sm text-gray-600 mb-6">Esta acción no se puede deshacer.</p>
+                <div class="flex justify-center gap-4">
+                    <button id="confirm-delete-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">
+                        Eliminar
+                    </button>
+                    <button id="cancel-delete-btn" class="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ID de Usuario, movido a la parte inferior -->
+        <p class="text-center text-gray-600 mt-8">ID de Usuario: <span id="userIdDisplay" class="font-semibold text-blue-600">Cargando...</span></p>
+
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, updateDoc, addDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global variables for Firebase configuration, provided by the environment.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db, auth, userId;
+        let qrCodeDisplay = document.getElementById('qr-code-display');
+        let whatsappShareBtn = document.getElementById('whatsappShareBtn');
+        let allGuests = []; // Almacenará la lista completa de invitados
+
+        // Helper function to show custom messages instead of `alert()`.
+        const showMessage = (text, isError = false) => {
+            const messageBox = document.getElementById('message-box');
+            const messageText = document.getElementById('message-text');
+            messageText.textContent = text;
+            messageText.className = `text-lg mb-4 ${isError ? 'text-red-600' : 'text-green-600'}`;
+            messageBox.style.display = 'flex';
+        };
+
+        // Close button for the custom message box.
+        document.getElementById('close-message-btn').addEventListener('click', () => {
+            document.getElementById('message-box').style.display = 'none';
+        });
+
+        // Tab switching logic
+        const setupTabs = () => {
+            const tabs = document.querySelectorAll('.tab-button');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    // Remove active class from all tabs and hide all content
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tabContents.forEach(c => c.classList.add('hidden'));
+
+                    // Add active class to the clicked tab and show its content
+                    tab.classList.add('active');
+                    const targetTabId = tab.getAttribute('data-tab');
+                    document.getElementById(targetTabId).classList.remove('hidden');
+
+                    // If we switch to the scanner tab, start the scanner
+                    if (targetTabId === 'tab-scanner') {
+                         setupQrScanner();
+                    }
+                });
+            });
+        };
+
+
+        const app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
+
+        // Sign in the user with the provided token or anonymously if no token exists.
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                userId = user.uid;
+                document.getElementById('userIdDisplay').textContent = userId;
+                // Start listening for guests after authentication is complete.
+                setupTabs();
+                setupGuestListListener();
+            } else {
+                try {
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (error) {
+                    console.error("Error signing in:", error);
+                }
+            }
+        });
+
+        // Function to render the guest list in the UI
+        const renderGuestList = (guestsToRender) => {
+            const guestsList = document.getElementById('guestsList');
+            guestsList.innerHTML = '';
+
+            if (guestsToRender.length === 0) {
+                guestsList.innerHTML = `<p class="text-center text-gray-500">No se encontraron invitados.</p>`;
+                return;
+            }
+
+            const table = document.createElement('table');
+            table.className = "min-w-full divide-y divide-gray-200 rounded-lg";
+            table.innerHTML = `
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Referencia</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pago</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200"></tbody>
+            `;
+            const tbody = table.querySelector('tbody');
+
+            guestsToRender.forEach((guest) => {
+                const row = document.createElement('tr');
+                row.className = guest.checkedIn ? 'bg-green-50' : 'bg-white';
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${guest.referenceCode}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${guest.name}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ${guest.paymentMethod || 'N/A'} - $${(guest.amountPaid !== undefined) ? guest.amountPaid : 'N/A'}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${guest.checkedIn ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                            ${guest.checkedIn ? 'Registrado' : 'Pendiente'}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div class="flex items-center gap-2">
+                            <button data-guest-id="${guest.id}" class="edit-btn text-blue-600 hover:text-blue-900 font-semibold transition duration-300">Editar</button>
+                            <button data-guest-id="${guest.id}" class="delete-btn text-red-600 hover:text-red-900 font-semibold transition duration-300">Eliminar</button>
+                            <button data-guest-id="${guest.id}" data-guest-name="${guest.name}" data-guest-ref="${guest.referenceCode}" class="view-qr-btn text-gray-600 hover:text-gray-900 font-semibold transition duration-300">Ver QR</button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+            guestsList.appendChild(table);
+
+            // Add event listeners for the new "Ver QR" buttons
+            document.querySelectorAll('.view-qr-btn').forEach(button => {
+                button.addEventListener('click', (event) => {
+                    const guestId = event.target.getAttribute('data-guest-id');
+                    const guestName = event.target.getAttribute('data-guest-name');
+                    const guestRef = event.target.getAttribute('data-guest-ref');
+                    showGuestQrModal(guestId, guestName, guestRef);
+                });
+            });
+
+            // Add event listeners for Edit buttons
+            document.querySelectorAll('.edit-btn').forEach(button => {
+                button.addEventListener('click', (event) => {
+                    const guestId = event.target.getAttribute('data-guest-id');
+                    const guest = allGuests.find(g => g.id === guestId);
+                    if (guest) {
+                        setupEditModal(guest);
+                    }
+                });
+            });
+
+            // Add event listeners for Delete buttons
+            document.querySelectorAll('.delete-btn').forEach(button => {
+                button.addEventListener('click', (event) => {
+                    const guestId = event.target.getAttribute('data-guest-id');
+                    const guest = allGuests.find(g => g.id === guestId);
+                    if (guest) {
+                        setupDeleteModal(guest);
+                    }
+                });
+            });
+        };
+
+        // Function to set up real-time listener for the guest list.
+        const setupGuestListListener = () => {
+            const guestsCollectionRef = collection(db, `artifacts/${appId}/public/data/guests`);
+            const q = query(guestsCollectionRef);
+            const searchInput = document.getElementById('guestSearchInput');
+            const totalGuestsCountSpan = document.getElementById('totalGuestsCount');
+            const registeredGuestsCountSpan = document.getElementById('registeredGuestsCount');
+
+            onSnapshot(q, (querySnapshot) => {
+                allGuests = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                
+                // Update total count
+                totalGuestsCountSpan.textContent = allGuests.length;
+
+                // Update registered guests count
+                const registeredCount = allGuests.filter(guest => guest.checkedIn).length;
+                registeredGuestsCountSpan.textContent = registeredCount;
+                
+                // Render the initial list (unfiltered)
+                const searchTerm = searchInput.value.toLowerCase().trim();
+                const filteredGuests = allGuests.filter(guest => 
+                    guest.name.toLowerCase().includes(searchTerm) || 
+                    guest.referenceCode.toLowerCase().includes(searchTerm)
+                );
+                renderGuestList(filteredGuests);
+            });
+
+            // Add listener for search input
+            searchInput.addEventListener('input', (event) => {
+                const searchTerm = event.target.value.toLowerCase().trim();
+                const filteredGuests = allGuests.filter(guest => 
+                    guest.name.toLowerCase().includes(searchTerm) || 
+                    guest.referenceCode.toLowerCase().includes(searchTerm)
+                );
+                renderGuestList(filteredGuests);
+            });
+        };
+
+        // Function to show the QR code in a modal
+        const showGuestQrModal = (guestId, guestName, guestRef) => {
+            const qrModal = document.getElementById('qr-modal-box');
+            const qrModalGuestName = document.getElementById('qr-modal-guest-name');
+            const qrModalDisplay = document.getElementById('qr-modal-display');
+            const qrText = JSON.stringify({ guestId, name: guestName, referenceCode: guestRef });
+            const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrText)}&size=200x200&color=0a0a0a`;
+            
+            qrModalGuestName.textContent = `Código para: ${guestName}`;
+            qrModalDisplay.innerHTML = `<img src="${qrImageUrl}" alt="QR Code for ${guestName}" class="mx-auto w-full h-full rounded-lg">`;
+            qrModal.style.display = 'flex';
+        };
+
+        document.getElementById('close-qr-modal-btn').addEventListener('click', () => {
+            document.getElementById('qr-modal-box').style.display = 'none';
+        });
+
+        // Function to set up the Edit Modal
+        const setupEditModal = (guest) => {
+            const editModal = document.getElementById('edit-guest-modal');
+            document.getElementById('edit-guest-id').value = guest.id;
+            document.getElementById('edit-guest-name').value = guest.name;
+            document.getElementById('edit-payment-method').value = guest.paymentMethod || 'EFECTIVO';
+            document.getElementById('edit-amount-paid').value = guest.amountPaid || '';
+            document.getElementById('edit-checked-in').checked = guest.checkedIn;
+            editModal.style.display = 'flex';
+        };
+
+        // Function to handle the Save button in the Edit Modal
+        document.getElementById('save-edit-btn').addEventListener('click', async () => {
+            const guestId = document.getElementById('edit-guest-id').value;
+            const newName = document.getElementById('edit-guest-name').value;
+            const newPaymentMethod = document.getElementById('edit-payment-method').value;
+            const newAmountPaid = document.getElementById('edit-amount-paid').value;
+            const newCheckedInStatus = document.getElementById('edit-checked-in').checked;
+
+            if (newName.trim() === '') {
+                showMessage("El nombre no puede estar vacío.", true);
+                return;
+            }
+
+            try {
+                const guestDocRef = doc(db, `artifacts/${appId}/public/data/guests`, guestId);
+                await updateDoc(guestDocRef, {
+                    name: newName,
+                    paymentMethod: newPaymentMethod,
+                    amountPaid: newAmountPaid !== '' ? parseFloat(newAmountPaid) : null,
+                    checkedIn: newCheckedInStatus
+                });
+                document.getElementById('edit-guest-modal').style.display = 'none';
+                showMessage("¡Información del invitado actualizada con éxito!");
+            } catch (error) {
+                console.error("Error updating guest:", error);
+                showMessage("Error al actualizar el invitado. Inténtalo de nuevo.", true);
+            }
+        });
+
+        // Cancel button for Edit Modal
+        document.getElementById('cancel-edit-btn').addEventListener('click', () => {
+            document.getElementById('edit-guest-modal').style.display = 'none';
+        });
+
+        // Function to set up the Delete Modal
+        const setupDeleteModal = (guest) => {
+            const deleteModal = document.getElementById('delete-guest-modal');
+            document.getElementById('delete-guest-name').textContent = guest.name;
+            document.getElementById('confirm-delete-btn').setAttribute('data-guest-id', guest.id);
+            deleteModal.style.display = 'flex';
+        };
+
+        // Function to handle the Confirm Delete button
+        document.getElementById('confirm-delete-btn').addEventListener('click', async (event) => {
+            const guestId = event.target.getAttribute('data-guest-id');
+            try {
+                const guestDocRef = doc(db, `artifacts/${appId}/public/data/guests`, guestId);
+                await deleteDoc(guestDocRef);
+                document.getElementById('delete-guest-modal').style.display = 'none';
+                showMessage("Invitado eliminado con éxito.");
+            } catch (error) {
+                console.error("Error deleting guest:", error);
+                showMessage("Error al eliminar el invitado. Inténtalo de nuevo.", true);
+            }
+        });
+
+        // Cancel button for Delete Modal
+        document.getElementById('cancel-delete-btn').addEventListener('click', () => {
+            document.getElementById('delete-guest-modal').style.display = 'none';
+        });
+
+
+        // Function to generate and save a QR code for a new guest.
+        document.getElementById('generateQrBtn').addEventListener('click', async () => {
+            const guestName = document.getElementById('guestNameInput').value.trim();
+            const paymentMethod = document.getElementById('paymentMethodSelect').value;
+            const amountPaid = document.getElementById('amountPaidInput').value;
+            
+            if (guestName === '') {
+                showMessage("Por favor, ingresa un nombre para el invitado.", true);
+                return;
+            }
+
+            try {
+                const guestsCollectionRef = collection(db, `artifacts/${appId}/public/data/guests`);
+                const allGuestsDocs = await getDocs(guestsCollectionRef);
+                const referenceCode = `#${1000 + allGuestsDocs.size}`;
+
+                const newGuestDocRef = await addDoc(guestsCollectionRef, {
+                    name: guestName,
+                    checkedIn: false,
+                    referenceCode: referenceCode,
+                    paymentMethod: paymentMethod,
+                    amountPaid: amountPaid !== '' ? parseFloat(amountPaid) : null
+                });
+
+                const guestId = newGuestDocRef.id;
+                const qrText = JSON.stringify({ guestId, name: guestName, referenceCode: referenceCode });
+                const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrText)}&size=200x200&color=0a0a0a`;
+
+                const qrImage = new Image();
+                qrImage.onload = () => {
+                    qrCodeDisplay.innerHTML = '';
+                    qrCodeDisplay.appendChild(qrImage);
+                    document.getElementById('qr-display-container').classList.remove('hidden');
+                    document.getElementById('qr-guest-name').textContent = `Código para: ${guestName}`;
+                };
+                qrImage.src = qrImageUrl;
+
+                // Set initial message for WhatsApp share
+                const defaultMessage = `¡Hola ${guestName}! %C2%A1Ya puedes acceder al evento! Presenta este código QR en la entrada. ¡Nos vemos pronto!`;
+                whatsappShareBtn.onclick = () => {
+                    const shareUrl = `https://api.whatsapp.com/send?text=${defaultMessage}`;
+                    window.open(shareUrl, '_blank');
+                };
+
+                showMessage(`QR para "${guestName}" generado con éxito.`);
+                document.getElementById('guestNameInput').value = '';
+                document.getElementById('amountPaidInput').value = '';
+            } catch (error) {
+                console.error("Error generating QR:", error);
+                showMessage("Error al generar el QR. Inténtalo de nuevo.", true);
+            }
+        });
+
+        // Function to set up the QR scanner.
+        const setupQrScanner = () => {
+            const qrReader = document.getElementById('qr-reader');
+            const resultBox = document.getElementById('resultBox');
+            const html5QrCode = new Html5Qrcode("qr-reader");
+            let qrCodeScanner; // to hold the scanner instance
+
+            const onScanSuccess = async (decodedText, decodedResult) => {
+                let guestData;
+                try {
+                    guestData = JSON.parse(decodedText);
+                } catch (e) {
+                    showMessage("Código QR inválido. No se pudo leer el formato.", true);
+                    return;
+                }
+
+                if (!guestData || !guestData.guestId) {
+                    showMessage("Código QR inválido. Faltan datos del invitado.", true);
+                    return;
+                }
+
+                const guestId = guestData.guestId;
+
+                try {
+                    const guestDocRef = doc(db, `artifacts/${appId}/public/data/guests`, guestId);
+                    const guestDoc = await getDoc(guestDocRef);
+
+                    if (!guestDoc.exists()) {
+                        showMessage("Invitado no encontrado. El código es inválido.", true);
+                        return;
+                    }
+
+                    const guest = guestDoc.data();
+                    if (guest.checkedIn) {
+                        showMessage(`¡${guest.name} ya se ha registrado!`, true);
+                    } else {
+                        await updateDoc(guestDocRef, { checkedIn: true });
+                        const welcomeMessage = `¡Bienvenido, ${guest.name}!`;
+                        showMessage(`¡Registro exitoso! ${welcomeMessage}`);
+                    }
+
+                } catch (error) {
+                    console.error("Error processing scan:", error);
+                    showMessage("Ocurrió un error al procesar el código.", true);
+                }
+            };
+
+            const onScanError = (errorMessage) => {
+                // You can add logging here if needed for debugging.
+                // console.warn("QR Scan Error:", errorMessage);
+            };
+
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess, onScanError)
+                .catch(err => {
+                    console.error("Failed to start scanner:", err);
+                    if (err.name === 'NotAllowedError') {
+                        resultBox.innerHTML = `<p class="text-red-600">Error: Permiso de cámara denegado. Por favor, habilita el acceso a la cámara en la configuración de tu navegador.</p>`;
+                    } else if (err.name === 'NotFoundError') {
+                        resultBox.innerHTML = `<p class="text-red-600">Error: No se encontró una cámara. Asegúrate de que tu dispositivo tenga una cámara y que esté conectada.</p>`;
+                    } else {
+                        resultBox.innerHTML = `<p class="text-red-600">Error al iniciar el escáner: ${err.message}</p>`;
+                    }
+                });
+        };
+    </script>
+</body>
+</html>
